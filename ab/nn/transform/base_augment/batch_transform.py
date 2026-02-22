@@ -2,20 +2,30 @@ import torch
 import numpy as np
 
 
-def batch_transform(inputs, labels, alpha=1.0, augment=None, probs=None):
-    """
-    Randomly applies augmentation based on provided augment and probabilities
-    """
-    augment= np.random.choice(augment, p=probs)
-    if augment == 'cutmix':
-        return apply_cutmix(inputs, labels, alpha)
-    elif augment == 'mixup':
-        return apply_mixup(inputs, labels, alpha)
-    elif augment == 'cutout':
-        return apply_cutout(inputs, labels)
-    else:
-        return inputs, labels, labels, 1.0
 
+def batch_transform(inputs, labels, current_batch, total_batches, augment_configs):
+    """
+    Applies augmentations in a fixed epoch-order based on cumulative probabilities.
+    augment_configs: List of [type, alpha, prob]
+    """
+    # Calculate the relative position in the epoch (0.0 to 1.0)
+    progress = current_batch / total_batches
+    
+    cumulative_prob = 0.0
+    for aug_type, alpha, prob in augment_configs:
+        cumulative_prob += prob
+        if progress <= cumulative_prob:
+            if aug_type == 'cutmix':
+                return apply_cutmix(inputs, labels, alpha)
+            elif aug_type == 'mixup':
+                return apply_mixup(inputs, labels, alpha)
+            elif aug_type == 'cutout':
+                # alpha is 'length' for cutout
+                return apply_cutout(inputs, labels, length=int(alpha) if alpha else 16)
+            else: # 'none' or unknown types
+                return inputs, labels, labels, 1.0
+                
+    return inputs, labels, labels, 1.0
 
 
 

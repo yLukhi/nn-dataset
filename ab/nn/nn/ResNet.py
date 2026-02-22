@@ -136,42 +136,35 @@ class Net(nn.Module):
         self.criteria = (nn.CrossEntropyLoss().to(self.device),)
         self.optimizer = torch.optim.SGD(self.parameters(), lr=prm['lr'], momentum=prm['momentum'])
 
-        self.batch_transform_fn = None
-        
-        if prm.get('augment'): 
-            try:
-                mod = importlib.import_module(f"ab.nn.transform.base_augment.batch_transform")
-                
-                self.batch_transform_fn = partial(
-                    mod.batch_transform, 
-                    augment=prm.get('augment'), 
-                    probs=prm.get('probs'),
-                    alpha=prm.get('alpha', 1.0)            
-                )
-                
-                print(f"Augmentation loaded: Augment={prm.get('augment')}, Probs={prm.get('probs')}, Alpha={prm.get('alpha', 1.0)}")
 
+        if prm.get('AUGMENT'): 
+            try:
+                import batch_transform as bt
+                self.batch_transform_fn = bt.batch_transform
+                self.augment_configs = prm.get('AUGMENT') # Store the list [['cutmix', 0.5, 0.3], ...]
+                print(f"Augmentation loaded: Augment={prm.get('AUGMENT')}"})
             except ImportError as e:
                 print(f"Failed to load transform: {e}")
-
+        
 
     def learn(self, train_data):
-        for inputs, labels in train_data:
+
+        total_batches = len(train_data)
+        for batch_idx, (inputs, labels) in enumerate(train_data):
             inputs, labels = inputs.to(self.device), labels.to(self.device)
             self.optimizer.zero_grad()
 
-            if self.batch_transform_fn:
-                # Returns the modified input and the two targets + lambda
-                inputs, target_a, target_b, lam = self.batch_transform_fn(inputs, labels)
+            if hasattr(self, 'batch_transform_fn') and self.batch_transform_fn:
+                # Pass batch index and total batches to find the fixed order
+                inputs, target_a, target_b, lam = self.batch_transform_fn(
+                    inputs, labels, batch_idx, total_batches, self.augment_configs
+                )
                 
-                # Forward pass
                 outputs = self(inputs)
-                
-                # Loss for both targets and mix them based on lambda
+                # Weighted loss calculation
                 loss = lam * self.criteria[0](outputs, target_a) + (1. - lam) * self.criteria[0](outputs, target_b)
             
             else:
-                # Standard training 
                 outputs = self(inputs)
                 loss = self.criteria[0](outputs, labels)
 
@@ -179,7 +172,8 @@ class Net(nn.Module):
             nn.utils.clip_grad_norm_(self.parameters(), 3)
             self.optimizer.step()
     
-    
+
+
     def __init__(self, in_shape: tuple, out_shape: tuple, prm: dict, device: torch.device) -> None:
         super().__init__()
         self.device = device
