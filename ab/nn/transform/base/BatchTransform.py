@@ -20,7 +20,7 @@ def batch_transform(inputs, labels, current_batch, total_batches, augment_config
             elif aug_type == 'mixup':
                 return apply_mixup(inputs, labels, alpha)
             elif aug_type == 'cutout':
-                return apply_cutout(inputs, labels, portion)
+                return apply_cutout(inputs, labels, portion=alpha)
             else: # 'none' or unknown types
                 return inputs, labels, labels, 1.0
                 
