@@ -10,7 +10,7 @@
     "ttlSecondsAfterFinished": 86400,
     "template": {
       "spec": {
-        "nodeName": "w0-mi",
+        "nodeSelector": { "kubernetes.io/hostname": "w0-mi" },
         "securityContext": {
           "runAsUser": 1051,
           "runAsGroup": 1051
