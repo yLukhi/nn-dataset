@@ -10,7 +10,6 @@
     "ttlSecondsAfterFinished": 86400,
     "template": {
       "spec": {
-        "nodeName": "w0-mi",
         "securityContext": {
           "runAsUser": 1051,
           "runAsGroup": 1051
@@ -22,7 +21,7 @@
             "imagePullPolicy": "Always",
             "command": ["/bin/bash", "-c"],
             "args": [
-              "set -e; export HOME=/shared/ssd/home/b-a-kumar; export HF_HOME=/shared/ssd/home/b-a-kumar/.cache/huggingface; export HF_TOKEN=''; mkdir -p /shared/ssd/home/b-a-kumar; cd /shared/ssd/home/b-a-kumar; rm -rf nn-dataset; curl -L https://github.com/Arun03k/nn-dataset/archive/refs/heads/age-estimation-model.tar.gz | tar xz; mv nn-dataset-age-estimation-model nn-dataset; cd /shared/ssd/home/b-a-kumar/nn-dataset; export PYTHONPATH=/shared/ssd/home/b-a-kumar/nn-dataset:$PYTHONPATH; python3 -m pip install -e . -q; echo '--- GPU Check ---'; python3 -c \"import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else CPU}')\" ; echo '--- Starting Training ---'; python3 train_age_estimation.py 2>&1; echo '--- Training Finished ---'"
+              "set -e; export HOME=/shared/ssd/home/b-a-kumar; export HF_HOME=/shared/ssd/home/b-a-kumar/.cache/huggingface; export HF_TOKEN=''; cd /shared/ssd/home/b-a-kumar/nn-dataset; export PYTHONPATH=/shared/ssd/home/b-a-kumar/nn-dataset:$PYTHONPATH; echo '--- GPU Check ---'; python -c \"import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else CPU}')\" ; echo '--- Starting Training ---'; python train_age_estimation.py 2>&1; echo '--- Training Finished ---'"
             ],
             "resources": {
               "requests": {
