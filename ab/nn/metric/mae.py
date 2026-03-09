@@ -1,9 +1,13 @@
 # MAE metric: normalized to 0-1 accuracy score (1.0 = perfect, 0.0 = MAE >= threshold)
+# Threshold = 15 yrs → acc ≥ 0.767 means MAE ≤ 3.5 yrs
+#                     acc ≥ 0.733 means MAE ≤ 4.0 yrs
+# (Previously threshold=20; lowered to 15 to give finer gradient signal for the
+#  ≤3.5 yr target — Optuna maximises accuracy so tighter threshold ≈ harder problem)
 import torch
 
 
 class Net:
-    def __init__(self, max_mae_threshold: float = 20.0):
+    def __init__(self, max_mae_threshold: float = 15.0):
         self.name = "mae"
         self.max_mae_threshold = max_mae_threshold
         self.reset()
@@ -28,6 +32,8 @@ class Net:
         return self.compute()
 
     # Returns normalized accuracy: 1.0 - (MAE / threshold)
+    # acc=0.767 → MAE=3.5 yrs  (target lower bound)
+    # acc=0.733 → MAE=4.0 yrs
     def compute(self) -> float:
         if self._total_samples == 0:
             return 0.0
@@ -43,4 +49,4 @@ class Net:
 
 # Framework factory function
 def create_metric(out_shape=None):
-    return Net(max_mae_threshold=20.0)
+    return Net(max_mae_threshold=15.0)

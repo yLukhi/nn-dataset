@@ -2,10 +2,13 @@
 Phase 2: Train final MobileAgeNet with best hyperparameters from Optuna search.
 
 Workflow:
-  1. Run train_age_estimation.py  → Phase 1: 30 trials x 50 epochs (HP search)
-  2. Run check_results.py         → See best HPs from Phase 1 logs
+  1. Run train_age_estimation.py  → Phase 1: 30 trials × 50 epochs (HP search)
+  2. Review best HPs from Phase 1 DB / stdout logs
   3. Update the locked values below with the best HPs
-  4. Run this script              → Phase 2: 1 trial x 100 epochs (final model)
+  4. Run this script              → Phase 2: 1 trial × 100 epochs (final model)
+
+Target: MAE ≤ 3.5 yrs on UTKFace held-out test set
+        normalized accuracy ≥ 0.767  (threshold = 15 yrs)
 
 Usage:
     python train_final.py
@@ -18,14 +21,15 @@ if __name__ == '__main__':
 from ab.nn.train import main
 from ab.nn.util.Const import data_dir
 
-# ── Best HPs from Phase 1 Optuna search (30 trials x 50 epochs) ───────────────
-# Best result: MAE=0.1105 at epoch 2
-# Transform  : bf-v1-RandomCrop_RandomPosterize_RandomGrayscale
-BEST_LR        = 0.003997   # best trial lr
-BEST_BATCH_PW  = 6          # batch=64 (2^6)
-BEST_MOMENTUM  = 0.9044     # best trial momentum
-BEST_DROPOUT   = 0.1866     # best trial dropout
-BEST_TRANSFORM = ('bf-v1-RandomCrop_RandomPosterize_RandomGrayscale',)
+# ── Best HPs from Phase 1 Optuna search (30 trials × 50 epochs) ───────────────
+# Update these after reviewing Phase 1 results.
+# Placeholder values below are reasonable AdamW starting points.
+# The optimizer switch (SGD → AdamW) means Phase-1 best HPs must be re-read.
+BEST_LR        = 0.001      # AdamW LR (typical sweet-spot: 5e-4 – 2e-3)
+BEST_BATCH_PW  = 6          # batch = 2^6 = 64
+BEST_MOMENTUM  = 0.90       # unused by AdamW; kept for framework compatibility
+BEST_DROPOUT   = 0.20       # head dropout
+BEST_TRANSFORM = ('Resize_ColorJit_Flip_Blur',)   # face-aware 224×224 augmentation
 # ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
@@ -33,12 +37,13 @@ if __name__ == '__main__':
 
     print("=" * 60)
     print("PHASE 2: FINAL TRAINING WITH BEST HYPERPARAMETERS")
+    print(f"  Target: MAE ≤ 3.5 yrs  (acc ≥ 0.767 with threshold=15 yrs)")
     print("=" * 60)
     print(f"\nConfig    : {config}")
     print(f"Data      : {data_dir}")
     print(f"LR        : {BEST_LR}")
     print(f"Batch     : 2^{BEST_BATCH_PW} = {2**BEST_BATCH_PW}")
-    print(f"Momentum  : {BEST_MOMENTUM}")
+    print(f"Momentum  : {BEST_MOMENTUM}  (AdamW: ignored)")
     print(f"Dropout   : {BEST_DROPOUT}")
     print(f"Transform : {BEST_TRANSFORM[0]}")
     print("=" * 60)
@@ -59,10 +64,10 @@ if __name__ == '__main__':
         save_pth_weights=True,
         save_onnx_weights=1,
         num_workers=8,
-        epoch_limit_minutes=480,         # 8 hours max
+        epoch_limit_minutes=600,         # 10 hours max for 100 epochs
     )
 
     print("\n" + "=" * 60)
-    print("FINAL TRAINING COMPLETE")
-    print("Run: python check_results.py")
+    print("PHASE 2 FINAL TRAINING COMPLETE")
+    print("Check held-out test MAE printed above.")
     print("=" * 60)

@@ -1,4 +1,5 @@
-# Train MobileAgeNet on UTKFace with Optuna hyperparameter optimization
+# Train MobileAgeNet on UTKFace with Optuna hyperparameter optimisation
+# Target: MAE ≤ 3.5 yrs (normalized accuracy ≥ 0.825, threshold=20 yrs)
 import multiprocessing
 
 if __name__ == '__main__':
@@ -25,15 +26,34 @@ if __name__ == '__main__':
     close_conn(conn)
     print("Database initialized with model code!\n")
 
-    # Exclude broken five_crop transform (returns tuple instead of single image)
+    # Prefer face-aware transforms; fall back to all valid ones if unavailable.
+    # five_crop excluded: returns tuple instead of a single tensor.
+    # Grayscale excluded: destroys skin-tone cues that carry age signal.
     all_transforms = supported_transformers()
-    valid_transforms = tuple([t for t in all_transforms if t != 'five_crop'])
-    print(f"Available transforms: {len(valid_transforms)} (excluded: five_crop)\n")
+    preferred_transforms = [
+        'Resize_ColorJit_Flip_Blur',          # face-aware 224×224 (best for age)
+        'norm_256_flip',                       # simple 256×256 + flip baseline
+        'norm_256',                            # no-augmentation reference
+        'bf-v1-RandomCrop_Pad_RandomHorizontalFlip_256',  # 256 crop+flip
+        'bf-v1-RandomHorizontalFlip_RandomAutocontrast_256',
+        'bf-v1-RandomCrop_RandomRotation_RandomAutocontrast_256',
+        'bf-v1-RandomPosterize_256',
+    ]
+    # Keep only transforms that are actually registered in this repo
+    valid_preferred = tuple([t for t in preferred_transforms if t in all_transforms])
+    # Fallback: use all valid transforms (minus broken ones) when preferred set is too small
+    fallback_transforms = tuple([
+        t for t in all_transforms
+        if t not in ('five_crop',) and 'Grayscale' not in t and 'grayscale' not in t
+    ])
+    face_transforms = valid_preferred if len(valid_preferred) >= 3 else fallback_transforms
+    print(f"Face-aware transforms selected: {len(face_transforms)}\n")
 
     config = 'age-regression_utkface_mae_MobileAgeNet'
 
     print("=" * 60)
-    print("TRAINING MOBILEAGENET ON UTKFACE")
+    print("PHASE 1: HYPERPARAMETER SEARCH — MobileAgeNet on UTKFace")
+    print(f"  Target: MAE ≤ 3.5 yrs  (acc ≥ 0.767 with threshold=15 yrs)")
     print("=" * 60)
     print(f"\nConfig : {config}")
     print(f"Data   : {data_dir}")
@@ -43,21 +63,26 @@ if __name__ == '__main__':
         config=config,
         epoch_max=50,
         n_optuna_trials=30,
-        min_batch_binary_power=5,
+        # Batch: 64–128 — larger batches stabilise AdamW on regression
+        min_batch_binary_power=6,
         max_batch_binary_power=7,
-        min_learning_rate=0.0001,
-        max_learning_rate=0.01,
+        # LR range tuned for AdamW (lower max than SGD)
+        min_learning_rate=1e-4,
+        max_learning_rate=3e-3,
+        # momentum unused by AdamW but kept for framework compatibility
         min_momentum=0.85,
         max_momentum=0.95,
+        # Dropout range: light regularisation is enough with weight decay
         min_dropout=0.1,
-        max_dropout=0.3,
-        transform=valid_transforms,
+        max_dropout=0.4,
+        transform=face_transforms,
         save_pth_weights=True,
         save_onnx_weights=1,
         num_workers=8,
-        epoch_limit_minutes=1060
+        epoch_limit_minutes=1060,
     )
 
     print("\n" + "=" * 60)
-    print("TRAINING COMPLETE")
+    print("PHASE 1 COMPLETE — inspect DB / logs for best HPs")
+    print("Then update train_final.py and run it for Phase 2.")
     print("=" * 60)

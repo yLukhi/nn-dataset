@@ -1,4 +1,5 @@
 # MobileAgeNet: MobileNetV3-based lightweight CNN for age estimation (~1.5M params, ONNX/TFLite ready)
+# Target: MAE ≤ 3.5 yrs on UTKFace (normalized accuracy ≥ 0.767 with threshold=15 yrs)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -80,16 +81,30 @@ class Net(nn.Module):
         self.to(self.device)
         self.epoch_max = prm.get('epoch_max', 50)
         self._current_epoch = 0
-        # SmoothL1 (Huber) loss: robust to outliers, smoother gradients than pure L1
-        self.criteria = (nn.SmoothL1Loss(beta=1.0).to(self.device),)
-        # SGD with Nesterov momentum and stronger weight decay to combat overfitting
-        self.optimizer = torch.optim.SGD(
-            self.parameters(), lr=prm['lr'], momentum=prm['momentum'],
-            weight_decay=4e-4, nesterov=True
+
+        # Huber loss with beta=0.5: penalises large errors more than pure L1 while
+        # staying robust to outliers. For age in years this gives tighter MAE.
+        self.criteria = (nn.SmoothL1Loss(beta=0.5).to(self.device),)
+
+        # AdamW: decoupled weight decay works better than SGD for face regression
+        # in the 50-100 epoch regime, especially with cosine warmup.
+        self.optimizer = torch.optim.AdamW(
+            self.parameters(), lr=prm['lr'],
+            weight_decay=1e-3, eps=1e-8
         )
-        # Cosine annealing: smoothly decays LR from peak to near-zero over all epochs
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=self.epoch_max, eta_min=1e-6
+
+        # One-cycle LR: fast warmup (30% of epochs) then cosine decay.
+        # Consistently outperforms CosineAnnealingLR for regression on medium datasets.
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            self.optimizer,
+            max_lr=prm['lr'],
+            epochs=self.epoch_max,
+            steps_per_epoch=1,       # we call scheduler once per epoch
+            pct_start=0.30,
+            anneal_strategy='cos',
+            cycle_momentum=False,
+            div_factor=10.0,         # start LR = max_lr / 10
+            final_div_factor=1e3,    # end LR  = max_lr / 1000
         )
 
     def learn(self, train_data: Any) -> None:
@@ -101,10 +116,10 @@ class Net(nn.Module):
             outputs = self(inputs)
             loss = self.criteria[0](outputs, labels)
             loss.backward()
-            # Reduced clip norm: prevents unstable updates without hitting ceiling every epoch
+            # Gradient clipping prevents exploding gradients without masking signal
             nn.utils.clip_grad_norm_(self.parameters(), max_norm=5.0)
             self.optimizer.step()
-        # Step scheduler after each epoch
+        # Step once per epoch (OneCycleLR steps_per_epoch=1)
         self.scheduler.step()
         self._current_epoch += 1
     
@@ -138,20 +153,23 @@ class Net(nn.Module):
         self.stage4 = nn.Sequential(  # 112 -> 160, stride 2
             InvertedResidual(112, 160, kernel_size=5, stride=2, expansion_factor=6, use_se=True),
             InvertedResidual(160, 160, kernel_size=5, stride=1, expansion_factor=6, use_se=True),
+            InvertedResidual(160, 160, kernel_size=5, stride=1, expansion_factor=6, use_se=True),
         )
         self.final_conv = nn.Sequential(  # expand to 960 channels before pooling
             nn.Conv2d(160, 960, kernel_size=1, bias=False),
             nn.BatchNorm2d(960),
             HardSwish()
         )
-        
-        # Regression head: pool -> BN -> FC(256) -> dropout -> FC(128) -> dropout -> FC(1)
+
+        # Regression head: gap -> BN -> FC(512) -> drop -> FC(256) -> drop -> FC(1)
+        # Wider head helps capture the full 0-116 age range without saturating.
         self.head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1), nn.Flatten(),
-            nn.Linear(960, 256), nn.BatchNorm1d(256), HardSwish(),
+            nn.Linear(960, 512), nn.BatchNorm1d(512), HardSwish(),
             nn.Dropout(p=dropout),
-            nn.Linear(256, 128), HardSwish(),
+            nn.Linear(512, 256), nn.BatchNorm1d(256), HardSwish(),
             nn.Dropout(p=dropout * 0.5),
+            nn.Linear(256, 128), HardSwish(),
             nn.Linear(128, out_shape[0])
         )
         self._initialize_weights()
