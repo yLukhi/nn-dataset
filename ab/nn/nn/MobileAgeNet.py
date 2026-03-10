@@ -4,10 +4,29 @@
 # Training strategy: 2-phase — freeze backbone for first _FREEZE_EPOCHS to warm up
 # the head, then fine-tune all layers with differential LR (backbone 0.05× head).
 # Expected improvement: MAE ~6.7 yrs (v1) → ≤3.5 yrs (v2 target).
+import ssl
+import contextlib
 import torch
 import torch.nn as nn
 from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
 from typing import Tuple, Dict, Any
+
+
+@contextlib.contextmanager
+def _unverified_ssl():
+    """Temporarily disable SSL cert verification for PyTorch CDN downloads.
+
+    Cluster environments often run a corporate TLS proxy whose root CA is not
+    in the system trust store, causing urllib to raise CERTIFICATE_VERIFY_FAILED
+    when torch.hub tries to download pretrained weights.  Scoping the bypass to
+    only this download keeps the rest of the process unaffected.
+    """
+    orig = ssl._create_default_https_context
+    ssl._create_default_https_context = ssl._create_unverified_context
+    try:
+        yield
+    finally:
+        ssl._create_default_https_context = orig
 
 # Number of epochs to keep the backbone frozen (head warm-up phase)
 _FREEZE_EPOCHS = 10
@@ -92,10 +111,9 @@ class Net(nn.Module):
         dropout = prm.get('dropout', 0.3)
         out_dim = out_shape[0] if out_shape else 1
 
-        # ImageNet pretrained MobileNetV3-Large:
-        #   features(x) → (B, 960, 7, 7) for 224×224 input
-        #   avgpool(x)   → (B, 960, 1, 1)
-        backbone = mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.IMAGENET1K_V2)
+        # ImageNet pretrained MobileNetV3-Large with SSL bypass for cluster environments
+        with _unverified_ssl():
+            backbone = mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.IMAGENET1K_V2)
         self.features = backbone.features
         self.avgpool  = backbone.avgpool
 
