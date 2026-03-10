@@ -22,12 +22,13 @@ from ab.nn.train import main
 from ab.nn.util.Const import data_dir
 
 # ── Best HPs from Phase 1 Optuna search (30 trials × 50 epochs) ───────────────
-# Trial 14 — best val acc = 0.6653 (~MAE 5.0 yrs @ 50 epochs)
-# All top-6 trials used Resize_ColorJit_Flip_Blur + batch=64
-BEST_LR        = 0.002454   # Trial 14: acc=0.6653 (lr range 0.0014–0.0028 swept)
-BEST_BATCH_PW  = 6          # batch = 2^6 = 64 (consistently best across top trials)
-BEST_MOMENTUM  = 0.8783     # Trial 14 (unused by AdamW; kept for framework compat)
-BEST_DROPOUT   = 0.3192     # Trial 14
+# MODEL CHANGED: MobileAgeNet v2 now uses a pretrained MobileNetV3-Large backbone.
+# Re-run train_age_estimation.py (Phase 1) to get new best HPs, then update here.
+# Placeholder values below are good starting points for pretrained fine-tuning.
+BEST_LR        = 1e-3       # head LR; backbone gets 0.05× inside MobileAgeNet
+BEST_BATCH_PW  = 6          # batch = 2^6 = 64
+BEST_MOMENTUM  = 0.90       # unused by AdamW; kept for framework compatibility
+BEST_DROPOUT   = 0.30       # head dropout
 BEST_TRANSFORM = ('Resize_ColorJit_Flip_Blur',)   # face-aware 224×224 augmentation
 # ──────────────────────────────────────────────────────────────────────────────
 

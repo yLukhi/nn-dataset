@@ -63,19 +63,20 @@ if __name__ == '__main__':
         config=config,
         epoch_max=50,
         n_optuna_trials=30,
-        # Batch: 64–128 — larger batches stabilise AdamW on regression
+        # Batch: 64 wins consistently; allow 128 for Optuna to verify.
         min_batch_binary_power=6,
         max_batch_binary_power=7,
-        # LR range for AdamW. Min raised to 5e-4 so OneCycleLR start
-        # (max_lr/div_factor = max_lr/3) stays above 1e-4 threshold.
-        min_learning_rate=5e-4,
-        max_learning_rate=3e-3,
+        # LR = head LR for pretrained fine-tuning.
+        # Backbone gets 0.05× this inside MobileAgeNet._init_finetune().
+        # Range: 3e-4..2e-3 — wide enough to probe without damaging pretrained features.
+        min_learning_rate=3e-4,
+        max_learning_rate=2e-3,
         # momentum unused by AdamW but kept for framework compatibility
         min_momentum=0.85,
         max_momentum=0.95,
-        # Dropout range: light regularisation is enough with weight decay
+        # Dropout range for the small regression head
         min_dropout=0.1,
-        max_dropout=0.4,
+        max_dropout=0.5,
         transform=face_transforms,
         save_pth_weights=True,
         save_onnx_weights=1,
