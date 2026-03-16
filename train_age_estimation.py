@@ -68,8 +68,8 @@ if __name__ == '__main__':
     RESET_DB = True
 
     NUM_WORKERS = int(os.environ.get("AGE_NUM_WORKERS", "8"))
-    N_TRIALS = int(os.environ.get("AGE_OPTUNA_TRIALS", "20"))
-    EPOCH_MAX = int(os.environ.get("AGE_EPOCH_MAX", "50"))
+    N_TRIALS = int(os.environ.get("AGE_OPTUNA_TRIALS", "40"))
+    EPOCH_MAX = int(os.environ.get("AGE_EPOCH_MAX", "60"))
 
     nn_prm = {
         'freeze_epochs': 5,
