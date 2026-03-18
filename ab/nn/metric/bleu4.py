@@ -38,7 +38,7 @@ class BLEUMetric:
             self.scores4.append(sentence_bleu(filtered_refs, hyp, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=self.smooth))
 
     def result(self):
-        # Return BLEU-4 for Optuna/pipeline
+        # Return BLEU-4 for Optuna/pipeline (to match user's previous 41-44% baseline)
         return float(sum(self.scores4)) / max(len(self.scores4), 1)
 
     def get_all(self):

@@ -13,7 +13,6 @@ import platform
 import shutil
 import subprocess
 import importlib
-from datetime import datetime
 from typing import Optional
 import psutil
 
@@ -331,7 +330,7 @@ def extract_arch_name(model_class_path: str) -> str:
     return parts[-1]
 
 def default_outpath(model_name: str, config: Optional[str] = None) -> str:
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.datetime.strftime("%Y%m%dT%H%M%SZ")
     this_dir = os.path.dirname(os.path.dirname(__file__))
 
     if config:

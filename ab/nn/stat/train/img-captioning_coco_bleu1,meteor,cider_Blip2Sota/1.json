@@ -15,7 +15,7 @@
         "gpu_type": "NVIDIA GeForce RTX 4090",
         "gradient_norm": 0.0,
         "lr": 1e-05,
-        "metric_bleu": 0.5148342497450443,
+        "metric_bleu1": 0.5148342497450443,
         "metric_cider": 0.026701832602379308,
         "metric_meteor": 0.18983461518494266,
         "occupied_gpu_memory_kb": 15910023.5,
