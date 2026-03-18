@@ -40,6 +40,11 @@
               { "mountPath": "/shared/ssd", "name": "shared-ssd" },
               { "mountPath": "/shared/local/data/b-a-kumar", "name": "local-data" }
             ]
+            ,
+            "env": [
+              { "name": "AGE_FINAL_EPOCHS", "value": "100" },
+              { "name": "AGE_NUM_WORKERS", "value": "8" }
+            ]
           }
         ],
         "restartPolicy": "Never",
