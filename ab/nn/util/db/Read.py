@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from ab.nn.util.Const import *
 from ab.nn.util.Util import is_full_config, str_not_none
@@ -108,6 +109,13 @@ def data(only_best_accuracy: bool = False,
       - 'nn_stats_meta': dict         (additional metadata as JSON)
       - 'nn_stats_error': str         (error message if statistics failed)
     """
+    if sql is not None:
+        sql = replace(
+            sql,
+            task=sql.task or task,
+            dataset=sql.dataset or dataset,
+            metric=sql.metric or metric,
+        )
 
     # Build filtering conditions based on provided parameters.
     params, where_clause = sql_where([task, dataset, metric, nn, epoch])

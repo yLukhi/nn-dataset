@@ -182,11 +182,24 @@ def _resolve_anchor(
     # Candidate anchors: top accuracy models that also have minhash
     anchors = cur.execute(
         f"""
-        SELECT s.nn
-        FROM {work_table} s
-        JOIN nn_minhash m ON m.nn = s.nn
-        {where_sql}
-        ORDER BY s.accuracy DESC
+        WITH scoped AS (
+          SELECT s.*
+          FROM {work_table} s
+          {where_sql}
+        ),
+        best_per_nn AS (
+          SELECT s.*,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY s.nn
+                   ORDER BY s.accuracy DESC, s.epoch ASC, s.nn ASC
+                 ) AS rn
+          FROM scoped s
+        )
+        SELECT b.nn
+        FROM best_per_nn b
+        JOIN nn_minhash m ON m.nn = b.nn
+        WHERE b.rn = 1
+        ORDER BY b.accuracy DESC, b.nn ASC
         LIMIT ?
         """,
         params + [int(max_trials)],
