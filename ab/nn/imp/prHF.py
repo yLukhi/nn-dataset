@@ -406,9 +406,9 @@ def process_single_model(model_name: str, args) -> Dict[str, Any]:
             )
             with open(source_json, 'r') as f:
                 source_data = json.load(f)
-            transform_name = source_data.get(model_name, {}).get("transform", "default")
+            transform_name = source_data.get(model_name, {}).get("transform")
         except:
-            transform_name = "default"
+            transform_name = None
         
         # Instantiate model
         model = instantiate_model(module.Net)
