@@ -13,11 +13,11 @@ from ab.nn.util.Const import data_dir
 
 
 # Replace these after Phase 1.
-BEST_LR = 8e-4
+BEST_LR = 0.0014162041314420217
 BEST_BATCH_PW = 6                 # batch = 64
 BEST_MOMENTUM = 0.90              # framework placeholder only
-BEST_DROPOUT = 0.15
-BEST_TRANSFORM = ('norm_256_flip',)
+BEST_DROPOUT = 0.1807417434748134
+BEST_TRANSFORM = ('Resize_ColorJit_Flip_Blur',)
 
 BEST_FREEZE_EPOCHS = 5
 BEST_BACKBONE_LR_MULT = 0.10

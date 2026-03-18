@@ -18,6 +18,7 @@ import json
 import shutil
 import time
 from pathlib import Path
+import argparse
 
 # --- PROJECT IMPORTS ---
 try:
@@ -101,7 +102,9 @@ def upload_to_hf(model_name, epoch_max, dataset, task, metric, accuracy, summary
         print('   ℹ️ No .pth file generated (Likely due to low accuracy). Uploading Metadata only.')
 
     try:
-        HF.upload_file(repo_id, local_checkpoint, f'{model_name}.pth')
+        # Upload checkpoint file only if found
+        if local_checkpoint:
+            HF.upload_file(repo_id, local_checkpoint, f'{model_name}.pth')
 
         # 2. Update Master Data
         new_metadata = {
@@ -112,7 +115,8 @@ def upload_to_hf(model_name, epoch_max, dataset, task, metric, accuracy, summary
             'task': task,
             'metric': metric,
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'prm': prm
+            'prm': prm,
+            'pth_uploaded': bool(local_checkpoint)
         }
         if new_metadata:
             summary_data[model_name] = new_metadata
@@ -140,12 +144,21 @@ def upload_to_hf(model_name, epoch_max, dataset, task, metric, accuracy, summary
 
 def main():
     try:
+        parser = argparse.ArgumentParser(description='Upload checkpoints to Hugging Face')
+        parser.add_argument('--task', default='img-classification', help='Task name (e.g. age-regression)')
+        parser.add_argument('--dataset', default='cifar-10', help='Dataset name (e.g. utkface)')
+        parser.add_argument('--metric', default='acc', help='Metric name (e.g. mae)')
+        parser.add_argument('--epoch-train-max', type=int, default=50, help='Epochs used for final training')
+        parser.add_argument('--test-mode', action='store_true', help='Run in test mode (limited models)')
+        args = parser.parse_args()
+
         print('📊 Fetching models from API...')
         epoch_max = 5
-        epoch_train_max = 50
-        dataset = 'cifar-10'
-        task = 'img-classification'
-        metric = 'acc'
+        epoch_train_max = args.epoch_train_max
+        dataset = args.dataset
+        task = args.task
+        metric = args.metric
+        TEST_MODE = args.test_mode
         REPO_NAME = 'checkpoints-epoch-' + str(epoch_train_max)
         repo_id = f'{HF_NN}/{REPO_NAME}'
         df = unique_nn_cls(epoch_max, dataset, task, metric)
