@@ -67,22 +67,6 @@ def add_categorical_if_absent(trial, prms, nm, fn, default=None):
     return prms[nm]
 
 
-def get_attr(module_name: str, attr_name: str):
-    """
-    Import a module and get an attribute from it.
-    
-    Args:
-        module_name: Full module path (e.g., 'ab.nn.nn.RLFN')
-        attr_name: Attribute name to retrieve (e.g., 'Net')
-    
-    Returns:
-        The requested attribute from the module
-    """
-    import importlib
-    module = importlib.import_module(module_name)
-    return getattr(module, attr_name)
-
-
 def is_full_config(l: list[str] | tuple[str, ...]):
     return 4 == len(l) and (nn_dir / (l[-1] + '.py')).exists()
 
@@ -330,7 +314,7 @@ def extract_arch_name(model_class_path: str) -> str:
     return parts[-1]
 
 def default_outpath(model_name: str, config: Optional[str] = None) -> str:
-    ts = datetime.datetime.strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%SZ")
     this_dir = os.path.dirname(os.path.dirname(__file__))
 
     if config:
