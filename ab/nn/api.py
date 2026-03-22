@@ -52,18 +52,104 @@ def data(only_best_accuracy=False, task=None, dataset=None, metric=None, nn=None
 @functools.lru_cache(maxsize=10)
 def run_data(model_name=None, device_type=None, max_rows=None) -> DataFrame:
     """
-    Get runtime analytics as a pandas DataFrame.
+    Get comprehensive runtime and tflite analytics as a pandas DataFrame.
+    
+    Combines analytics from both the 'run' table (device performance metrics) and 
+    'tflite' table (model quantization metrics) joined by model_name. This enables
+    analysis of how a tflite model performs across different devices.
 
     Parameters:
       - model_name (str | None): filter by model name (FK to nn.name)
-      - device_type (str | None): filter by device type
+      - device_type (str | None): filter by device type (only applies to run table)
+      - max_rows (int | None): maximum number of results
+
+    Returns:
+      - A pandas DataFrame with columns from both tables:
+      
+        ** From run table (device runtime analytics) **
+        'id', 'model_name', 'device_type', 'os_version', 'valid', 'emulator', 'error_message', 
+        'duration', 'iterations', 'unit', 'cpu_duration', 'cpu_min_duration', 'cpu_max_duration', 
+        'cpu_std_dev', 'cpu_error', 'gpu_duration', 'gpu_min_duration', 'gpu_max_duration', 
+        'gpu_std_dev', 'gpu_error', 'npu_duration', 'npu_min_duration', 'npu_max_duration', 
+        'npu_std_dev', 'npu_error', 'total_ram_kb', 'free_ram_kb', 'available_ram_kb', 'cached_kb',
+        'in_dim_0', 'in_dim_1', 'in_dim_2', 'in_dim_3', 'device_analytics', 'precision_type'
+        
+        ** From tflite table (model metrics) **
+        'tflite_id', 'tflite_accuracy', 'tflite_transform', 'tflite_precision_type'
+        
+    Note: Each row represents a device-specific run of a tflite model. Multiple runs of the 
+    same tflite model on different devices will appear as separate rows. In the future, the 
+    tflite table structure will remain stable while run data will expand to cover more devices.
+    """
+    # Get run data
+    run_recs: tuple[dict, ...] = DB_Read.run_data(
+        model_name=model_name, 
+        device_type=device_type, 
+        max_rows=max_rows
+    )
+    
+    # Get tflite data
+    tflite_recs: tuple[dict, ...] = DB_Read.tflite_data(
+        model_name=model_name, 
+        max_rows=max_rows
+    )
+    
+    # Create a mapping of model_name to tflite data
+    tflite_map = {rec['model_name']: rec for rec in tflite_recs}
+    
+    # Merge run data with tflite data
+    merged_records = []
+    for run_rec in run_recs:
+        merged_rec = dict(run_rec)
+        
+        # Join with tflite data if available
+        if merged_rec['model_name'] in tflite_map:
+            tflite_rec = tflite_map[merged_rec['model_name']]
+            merged_rec['tflite_id'] = tflite_rec.get('id')
+            merged_rec['tflite_accuracy'] = tflite_rec.get('accuracy')
+            merged_rec['tflite_transform'] = tflite_rec.get('transform')
+            merged_rec['tflite_precision_type'] = tflite_rec.get('precision_type')
+        else:
+            # If no tflite data, set to None
+            merged_rec['tflite_id'] = None
+            merged_rec['tflite_accuracy'] = None
+            merged_rec['tflite_transform'] = None
+            merged_rec['tflite_precision_type'] = None
+        
+        merged_records.append(merged_rec)
+    
+    return DataFrame.from_records(merged_records)
+
+
+@functools.lru_cache(maxsize=10)
+def prun_data(model_name=None, pruning_method=None, task_dataset=None, max_rows=None) -> DataFrame:
+    """
+    Get pruning analytics as a pandas DataFrame.
+    
+    Extracts pruning experiment results from the 'prun' table, showing model compression
+    metrics achieved through various pruning methods.
+
+    Parameters:
+      - model_name (str | None): filter by model name (FK to nn.name)
+      - pruning_method (str | None): filter by pruning method (e.g., 'magnitude', 'lottery_ticket')
+      - task_dataset (str | None): filter by task_dataset combination
       - max_rows (int | None): maximum number of results
 
     Returns:
       - A pandas DataFrame with columns:
-        'id', 'model_name', 'device_type', 'os_version', 'valid', 'emulator', 'error_message', 'duration', 'device_analytics'
+        'id', 'model_name', 'pruning_method', 'task_dataset', 'status', 'accuracy',
+        'duration', 'pruning_ratio', 'params_before', 'params_after', 'params_removed',
+        'model_size_before_kb', 'model_size_after_kb'
+        
+    Each row represents one pruning experiment result with compression metrics.
+    Useful for analyzing model compression effectiveness across different pruning techniques.
     """
-    dt: tuple[dict, ...] = DB_Read.run_data(model_name=model_name, device_type=device_type, max_rows=max_rows)
+    dt: tuple[dict, ...] = DB_Read.prun_data(
+        model_name=model_name,
+        pruning_method=pruning_method,
+        task_dataset=task_dataset,
+        max_rows=max_rows
+    )
     return DataFrame.from_records(dt)
 
 
