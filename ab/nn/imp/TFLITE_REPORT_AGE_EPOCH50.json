@@ -1,0 +1,9 @@
+{
+    "MobileAgeNet": {
+        "status": "success",
+        "tflite_size_mb": 0.11,
+        "pytorch_mae": 9.0914,
+        "original_mae": 4.7372,
+        "note": "Real MobileAgeNet checkpoint converted to TFLite"
+    }
+}
