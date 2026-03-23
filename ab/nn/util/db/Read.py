@@ -52,6 +52,13 @@ def data(only_best_accuracy: bool = False,
          sql: Optional[JoinConf] = None,
          unique_nn: bool = False,
          include_nn_stats: bool = False,
+         nn_total_layers: bool = False,
+         nn_max_depth: bool = False,
+         nn_has_residual: bool = False,
+         nn_flops: bool = False,
+         nn_dropout_count: bool = False,
+         nn_total_params: bool = False,
+         nn_has_attention: bool = False,
          ) -> tuple[
     dict[str, int | float | str | dict[str, int | float | str]], ...
 ]:
@@ -109,6 +116,12 @@ def data(only_best_accuracy: bool = False,
       - 'nn_stats_error': str         (error message if statistics failed)
     """
 
+    # Check if any nn_* parameters are requested
+    include_nn_stats = include_nn_stats or any([
+        nn_total_layers, nn_max_depth, nn_has_residual,
+        nn_flops, nn_dropout_count, nn_total_params, nn_has_attention
+    ])
+
     # Build filtering conditions based on provided parameters.
     params, where_clause = sql_where([task, dataset, metric, nn, epoch])
     if nn_prefixes:
@@ -132,39 +145,33 @@ def data(only_best_accuracy: bool = False,
 
     # Build the SELECT clause based on whether nn_stats are requested
     if include_nn_stats:
-        select_clause = """
+        # Build the columns list dynamically based on which parameters are True
+        nn_columns = []
+        
+        if nn_total_params:
+            nn_columns.append('ns.total_params AS nn_total_params')
+        if nn_total_layers:
+            nn_columns.append('ns.total_layers AS nn_total_layers')
+        if nn_max_depth:
+            nn_columns.append('ns.max_depth AS nn_max_depth')
+        if nn_has_residual:
+            nn_columns.append('ns.has_residual_connections AS nn_has_residual')
+        if nn_flops:
+            nn_columns.append('ns.flops AS nn_flops')
+        if nn_dropout_count:
+            nn_columns.append('ns.dropout_count AS nn_dropout_count')
+        if nn_has_attention:
+            nn_columns.append('ns.has_attention AS nn_has_attention')
+        
+        # Always include these columns, optionally add the requested nn_* columns
+        nn_cols_str = ',\n                   '.join(nn_columns) if nn_columns else ''
+        if nn_cols_str:
+            nn_cols_str = ',\n                   ' + nn_cols_str
+        
+        select_clause = f"""
             SELECT s.id, s.task, s.dataset, s.metric, m.code AS metric_code, m.id AS metric_id,
                    s.nn, n.code AS nn_code, n.id AS nn_id, s.epoch, s.accuracy, s.duration,
-                   s.prm AS prm_id, t.code AS transform_code, t.id AS transform_id, s.transform,
-                   ns.total_params AS nn_total_params,
-                   ns.trainable_params AS nn_trainable_params,
-                   ns.frozen_params AS nn_frozen_params,
-                   ns.total_layers AS nn_total_layers,
-                   ns.leaf_layers AS nn_leaf_layers,
-                   ns.max_depth AS nn_max_depth,
-                   ns.flops AS nn_flops,
-                   ns.model_size_mb AS nn_model_size_mb,
-                   ns.buffer_size_mb AS nn_buffer_size_mb,
-                   ns.total_memory_mb AS nn_total_memory_mb,
-                   ns.dropout_count AS nn_dropout_count,
-                   ns.has_attention AS nn_has_attention,
-                   ns.has_residual_connections AS nn_has_residual,
-                   ns.is_resnet_like AS nn_is_resnet_like,
-                   ns.is_vgg_like AS nn_is_vgg_like,
-                   ns.is_inception_like AS nn_is_inception_like,
-                   ns.is_densenet_like AS nn_is_densenet_like,
-                   ns.is_unet_like AS nn_is_unet_like,
-                   ns.is_transformer_like AS nn_is_transformer_like,
-                   ns.is_mobilenet_like AS nn_is_mobilenet_like,
-                   ns.is_efficientnet_like AS nn_is_efficientnet_like,
-                   ns.code_length AS nn_code_length,
-                   ns.num_classes_defined AS nn_num_classes,
-                   ns.num_functions_defined AS nn_num_functions,
-                   ns.uses_sequential AS nn_uses_sequential,
-                   ns.uses_modulelist AS nn_uses_modulelist,
-                   ns.uses_moduledict AS nn_uses_moduledict,
-                   ns.meta_json AS nn_stats_meta,
-                   ns.error AS nn_stats_error
+                   s.prm AS prm_id, t.code AS transform_code, t.id AS transform_id, s.transform{nn_cols_str}
         """
         join_clause = """
             FROM {source} s
