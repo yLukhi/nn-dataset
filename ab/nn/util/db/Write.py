@@ -1,5 +1,4 @@
 import sys
-import tokenize
 
 from tqdm import tqdm
 
@@ -40,8 +39,7 @@ def code_to_db(cursor, table_name, code=None, code_file=None, force_name = None)
     else:
         nm = force_name
     if not code:
-        # Read Python source using its declared/default source encoding, not the OS locale.
-        with tokenize.open(code_file) as file:
+        with open(code_file, 'r') as file:
             code = file.read()
     id_val = uuid4(code)
     # Check if the model exists in the database

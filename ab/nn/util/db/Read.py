@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 
 from ab.nn.util.Const import *
 from ab.nn.util.Util import is_full_config, str_not_none
@@ -109,51 +108,13 @@ def data(only_best_accuracy: bool = False,
       - 'nn_stats_meta': dict         (additional metadata as JSON)
       - 'nn_stats_error': str         (error message if statistics failed)
     """
-    if sql is not None:
-        sql = replace(
-            sql,
-            task=sql.task or task,
-            dataset=sql.dataset or dataset,
-            metric=sql.metric or metric,
-        )
 
     # Build filtering conditions based on provided parameters.
     params, where_clause = sql_where([task, dataset, metric, nn, epoch])
     if nn_prefixes:
         where_clause += ' AND (' + ' OR '.join([f"nn LIKE '{prefix}%'" for prefix in nn_prefixes]) + ')'
 
-    optimize_sql_var_num = bool(
-        sql
-        and sql.similarity_mode == "none"
-        and int(sql.num_joint_nns) > 1
-        and not sql.same_columns
-        and not sql.diff_columns
-    )
-
     source = f'(SELECT s.* FROM stat s {where_clause})'
-    if optimize_sql_var_num:
-        prejoin_limit = int(sql.num_joint_nns) * int(sql.overfetch_factor)
-        source = f"""
-            (
-              WITH base AS (
-                SELECT s.*
-                FROM stat s
-                {where_clause}
-              ),
-              best_per_nn AS (
-                SELECT b.*,
-                       ROW_NUMBER() OVER (
-                         PARTITION BY b.nn
-                         ORDER BY b.accuracy DESC, b.epoch ASC, b.nn ASC
-                       ) AS rn
-                FROM base b
-              )
-              SELECT *
-              FROM best_per_nn
-              WHERE rn = 1
-              ORDER BY accuracy DESC, nn ASC
-              LIMIT {prejoin_limit}
-            )"""
     if unique_nn:
         source = f'(SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY nn ORDER BY accuracy DESC) rn FROM {source}) WHERE rn = 1)'
     if only_best_accuracy:
@@ -233,22 +194,15 @@ def data(only_best_accuracy: bool = False,
     conn = None
     try:
         conn, cur = sql_conn()
+        if sql: cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
+        cur.execute(f'CREATE TEMP TABLE {tmp_data} AS {base_query} ORDER BY RANDOM()' if sql else
+                    f'''{base_query}
+                        ORDER BY s.task, s.dataset, s.metric, s.nn, s.epoch
+                        {limit_clause}''',
+                    params)
         if sql:
-            cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
-            cur.execute(
-                f'''CREATE TEMP TABLE {tmp_data} AS
-                    {base_query}
-                    ORDER BY {'s.task, s.dataset, s.metric, s.nn, s.epoch' if optimize_sql_var_num else 'RANDOM()'}''',
-                params,
-            )
-            results = join_nn_query(sql, limit_clause, cur)
+            results = join_nn_query(sql,limit_clause, cur)
         else:
-            cur.execute(
-                f'''{base_query}
-                    ORDER BY s.task, s.dataset, s.metric, s.nn, s.epoch
-                    {limit_clause}''',
-                params,
-            )
             results = fill_hyper_prm(cur, include_nn_stats=include_nn_stats)
         return tuple(results)
     finally:

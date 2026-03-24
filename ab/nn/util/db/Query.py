@@ -182,24 +182,11 @@ def _resolve_anchor(
     # Candidate anchors: top accuracy models that also have minhash
     anchors = cur.execute(
         f"""
-        WITH scoped AS (
-          SELECT s.*
-          FROM {work_table} s
-          {where_sql}
-        ),
-        best_per_nn AS (
-          SELECT s.*,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY s.nn
-                   ORDER BY s.accuracy DESC, s.epoch ASC, s.nn ASC
-                 ) AS rn
-          FROM scoped s
-        )
-        SELECT b.nn
-        FROM best_per_nn b
-        JOIN nn_minhash m ON m.nn = b.nn
-        WHERE b.rn = 1
-        ORDER BY b.accuracy DESC, b.nn ASC
+        SELECT s.nn
+        FROM {work_table} s
+        JOIN nn_minhash m ON m.nn = s.nn
+        {where_sql}
+        ORDER BY s.accuracy DESC
         LIMIT ?
         """,
         params + [int(max_trials)],
@@ -500,30 +487,12 @@ def fill_hyper_prm(cur: Cursor, num_joint_nns=1, include_nn_stats=False) -> list
     if not rows: return []  # short-circuit for an empty result
     columns = [c[0] for c in cur.description]
 
-    col_idx = {name: idx for idx, name in enumerate(columns)}
-    needed_prm_ids: set[str] = set()
-    for name in ["prm_id", *[f"prm_id_{i}" for i in range(2, num_joint_nns + 1)]]:
-        idx = col_idx.get(name)
-        if idx is None:
-            continue
-        for row in rows:
-            uid = row[idx]
-            if uid is not None:
-                needed_prm_ids.add(uid)
-    # Load only the hyperparameters needed for the retrieved result rows.
+    # Bulk-load *all* hyperparameters for the retrieved stat_ids
     from collections import defaultdict
     prm_by_uid: dict[str, dict[str, int | float | str]] = defaultdict(dict)
 
-    prm_rows = []
-    if needed_prm_ids:
-        chunk_size = 900
-        needed_prm_list = sorted(needed_prm_ids)
-        for i in range(0, len(needed_prm_list), chunk_size):
-            chunk = needed_prm_list[i:i + chunk_size]
-            placeholders = ",".join("?" for _ in chunk)
-            cur.execute(f"SELECT uid, name, value FROM prm WHERE uid IN ({placeholders})", chunk)
-            prm_rows.extend(cur.fetchall())
-    for uid, name, value in prm_rows:
+    cur.execute(f"SELECT uid, name, value FROM prm")
+    for uid, name, value in cur.fetchall():
         prm_by_uid[uid][name] = value
 
     # Assemble the final result
