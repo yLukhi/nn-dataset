@@ -229,8 +229,8 @@ class Train:
         self.system_info = get_system_info()
 
     def _get_loss_function(self):
-        """Get loss function for metric tracking"""
-        if hasattr(self.model, 'criterion'):
+        """Build loss function based on the task or use model's custom criterion."""
+        if hasattr(self.model, 'criterion') and self.model.criterion is not None:
             return self.model.criterion
         elif hasattr(self.model, 'loss_fn'):
             return self.model.loss_fn
