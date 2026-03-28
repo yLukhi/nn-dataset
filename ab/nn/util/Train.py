@@ -23,6 +23,7 @@ from ab.nn.util.Util import *
 from ab.nn.util.db.Calc import save_results
 from ab.nn.util.db.Read import supported_transformers
 from ab.nn.util.db.Util import *
+from ab.nn.util.Const import ckpt_dir
 
 debug = False
 
@@ -276,6 +277,12 @@ class Train:
 
         self.system_info = get_system_info()
         self.tb_log_dir = _ensure_dir(tb_log_dir)
+        # Visualization directory under checkpoints: out/ckpt/<Model>/Visualization
+        try:
+            model_short = str(self.model_name).split('.')[-1]
+        except Exception:
+            model_short = str(self.model_name)
+        self.viz_dir = _ensure_dir(os.path.join(str(ckpt_dir), model_short, 'Visualization'))
 
     def _get_loss_function(self):
         """Get loss function for metric tracking."""
@@ -485,6 +492,12 @@ class Train:
                         plt.ylabel('Predicted')
                         plt.title('Predicted vs True')
                         tb_writer.add_figure('Scatter/Pred_vs_True', fig, epoch)
+                        # also save PNG
+                        try:
+                            scatter_path = os.path.join(self.viz_dir, f'scatter_epoch_{epoch}.png')
+                            fig.savefig(scatter_path)
+                        except Exception:
+                            pass
                         plt.close(fig)
 
                     if len(pred_arr) > 0:
@@ -494,6 +507,11 @@ class Train:
                         plt.legend()
                         plt.title('Prediction Distribution')
                         tb_writer.add_figure('Histogram/Pred_Distribution', fig_hist, epoch)
+                        try:
+                            hist_path = os.path.join(self.viz_dir, f'hist_epoch_{epoch}.png')
+                            fig_hist.savefig(hist_path)
+                        except Exception:
+                            pass
                         plt.close(fig_hist)
 
                     if len(img_list) > 0:
@@ -519,6 +537,13 @@ class Train:
                                 bbox=dict(facecolor='black', alpha=0.5)
                             )
                         tb_writer.add_figure('Samples/Images_with_Labels', fig_img, epoch)
+                        try:
+                            img_path = os.path.join(self.viz_dir, f'samples_epoch_{epoch}.png')
+                            # save the grid as an image
+                            torchvision.utils.save_image(grid, os.path.join(self.viz_dir, f'grid_epoch_{epoch}.png'), normalize=True)
+                            fig_img.savefig(os.path.join(self.viz_dir, f'samples_with_labels_epoch_{epoch}.png'))
+                        except Exception:
+                            pass
                         plt.close(fig_img)
 
                 except Exception as viz_e:
@@ -666,6 +691,17 @@ class Train:
             },
             'epoch_details': [asdict(e) for e in self.epoch_history]
         }
+
+        # Add model parameter count and approximate model size
+        try:
+            param_count = sum(p.numel() for p in self.model.parameters())
+            param_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
+            model_size_mb = param_bytes / 1024.0 / 1024.0
+            summary['model_info']['param_count'] = int(param_count)
+            summary['model_info']['model_size_mb'] = float(model_size_mb)
+            summary['visualization_dir'] = str(self.viz_dir)
+        except Exception:
+            pass
 
         summary_path = out_dir / 'training_summary.json'
         try:
