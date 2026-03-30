@@ -53,6 +53,14 @@ def _is_sql_variable_n_fast_path(sql: Optional[JoinConf]) -> bool:
     )
 
 
+def _is_sql_legacy_join_path(sql: Optional[JoinConf]) -> bool:
+    return bool(
+        sql
+        and sql.similarity_mode == "none"
+        and not _is_sql_variable_n_fast_path(sql)
+    )
+
+
 def _fetch_sql_variable_n_results(
         cur,
         sql: JoinConf,
@@ -242,6 +250,18 @@ def data(only_best_accuracy: bool = False,
                 join_clause,
                 include_nn_stats,
             )
+        elif _is_sql_legacy_join_path(sql):
+            cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
+            cur.execute(
+                f'''
+                CREATE TEMP TABLE {tmp_data} AS
+                SELECT s.*
+                FROM {source} s
+                ORDER BY RANDOM()
+                ''',
+                params,
+            )
+            results = join_nn_query_legacy(sql, limit_clause, cur, include_nn_stats=include_nn_stats)
         elif sql:
             cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
             cur.execute(f'CREATE TEMP TABLE {tmp_data} AS {base_query} ORDER BY RANDOM()', params)
