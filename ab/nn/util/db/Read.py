@@ -42,6 +42,44 @@ def code(table: str, nm: str) -> str:
 def nn_code(nm: str) -> str:
     return code('nn', nm)
 
+
+def _is_sql_variable_n_fast_path(sql: Optional[JoinConf]) -> bool:
+    return bool(
+        sql
+        and sql.similarity_mode == "none"
+        and int(sql.num_joint_nns) > 1
+        and not sql.same_columns
+        and not sql.diff_columns
+    )
+
+
+def _fetch_sql_variable_n_results(
+        cur,
+        sql: JoinConf,
+        source: str,
+        source_params: list,
+        select_clause: str,
+        join_clause: str,
+        include_nn_stats: bool,
+) -> list[dict]:
+    candidate_ids = select_sql_var_num_candidate_ids(cur, sql, source, source_params)
+    if not candidate_ids:
+        return []
+
+    placeholders = ', '.join(['?'] * len(candidate_ids))
+    cur.execute(
+        f"""
+        {select_clause}
+        {join_clause.format(source=source)}
+        WHERE s.id IN ({placeholders})
+        """,
+        source_params + candidate_ids,
+    )
+    results = fill_hyper_prm(cur, num_joint_nns=1, include_nn_stats=include_nn_stats)
+    order = {uid: idx for idx, uid in enumerate(candidate_ids)}
+    results.sort(key=lambda rec: order.get(rec["id"], len(order)))
+    return results
+
 def data(only_best_accuracy: bool = False,
          task: Optional[str] = None,
          dataset: Optional[str] = None,
@@ -109,7 +147,6 @@ def data(only_best_accuracy: bool = False,
       - 'nn_stats_meta': dict         (additional metadata as JSON)
       - 'nn_stats_error': str         (error message if statistics failed)
     """
-
     # Build filtering conditions based on provided parameters.
     params, where_clause = sql_where([task, dataset, metric, nn, epoch])
     if nn_prefixes:
@@ -195,15 +232,27 @@ def data(only_best_accuracy: bool = False,
     conn = None
     try:
         conn, cur = sql_conn()
-        if sql: cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
-        cur.execute(f'CREATE TEMP TABLE {tmp_data} AS {base_query} ORDER BY RANDOM()' if sql else
-                    f'''{base_query}
-                        ORDER BY s.task, s.dataset, s.metric, s.nn, s.epoch
-                        {limit_clause}''',
-                    params)
-        if sql:
+        if _is_sql_variable_n_fast_path(sql):
+            results = _fetch_sql_variable_n_results(
+                cur,
+                sql,
+                source,
+                params,
+                select_clause,
+                join_clause,
+                include_nn_stats,
+            )
+        elif sql:
+            cur.execute(f'DROP TABLE IF EXISTS {tmp_data}')
+            cur.execute(f'CREATE TEMP TABLE {tmp_data} AS {base_query} ORDER BY RANDOM()', params)
             results = join_nn_query(sql,limit_clause, cur)
         else:
+            cur.execute(
+                f'''{base_query}
+                        ORDER BY s.task, s.dataset, s.metric, s.nn, s.epoch
+                        {limit_clause}''',
+                params,
+            )
             results = fill_hyper_prm(cur, include_nn_stats=include_nn_stats)
         return tuple(results)
     finally:
