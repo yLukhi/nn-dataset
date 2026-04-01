@@ -1,7 +1,6 @@
 from typing import Optional
 
 import ab.nn.util.db.Read as DB_Read
-import ab.nn.util.Train as Train
 from ab.nn.util.Const import default_epoch_limit_minutes
 from pandas import DataFrame
 import functools
@@ -237,5 +236,6 @@ def check_nn(nn_code: str, task: str, dataset: str, metric: str, prm: dict, save
     for argument description see :ref:`ab.nn.util.db.Write.save_nn()`
     :return: Automatically generated name of NN model, its accuracy, accuracy to time metric, and quality of the code metric.
     """
+    import ab.nn.util.Train as Train
     return Train.train_new(nn_code, task, dataset, metric, prm, save_to_db=save_to_db, prefix=prefix, save_path=save_path, export_onnx=export_onnx,
                            epoch_limit_minutes=epoch_limit_minutes, transform_dir=transform_dir)

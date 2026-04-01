@@ -4,7 +4,6 @@ from tqdm import tqdm
 
 from ab.nn.util.Util import *
 from ab.nn.util.db.Init import init_db, sql_conn, close_conn
-from ab.nn.util.hf.DB_from_HF import db_from_hf
 from ab.nn.util.Const import nn_stat_table, stat_run_tflite_fp32_dir, stat_run_tflite_int8_dir, run_table, tflite_table, prun_table, stat_run_pt_dir
 from ab.nn.util.db.build_nn_similarity import upsert_minhash, upsert_minhash_batch
 
@@ -27,6 +26,7 @@ def init_population():
             except Exception as e:
                 print(f"NN statistics import failed: {e}")
         else:
+            from ab.nn.util.hf.DB_from_HF import db_from_hf
             db_from_hf()
 
 
