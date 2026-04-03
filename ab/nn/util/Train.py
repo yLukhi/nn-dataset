@@ -553,12 +553,21 @@ class Train:
                                 img_np = np.zeros_like(img_np)
 
                             ax.imshow(img_np)
-                            ax.set_title(
+                            ax.text(
+                                0.02,
+                                0.98,
                                 labels_text[idx],
-                                fontsize=9,
-                                pad=3,
+                                transform=ax.transAxes,
+                                va='top',
+                                ha='left',
+                                fontsize=8,
                                 color='white',
-                                backgroundcolor='black'
+                                bbox={
+                                    'facecolor': 'black',
+                                    'alpha': 0.65,
+                                    'pad': 2,
+                                    'edgecolor': 'none'
+                                }
                             )
 
                         fig_img.tight_layout(pad=0.6)
