@@ -1,9 +1,35 @@
 {
     "MobileAgeNet": {
         "status": "success",
-        "tflite_size_mb": 0.11,
-        "pytorch_mae": 9.0914,
-        "original_mae": 4.7372,
-        "note": "Real MobileAgeNet checkpoint converted to TFLite"
+        "tflite_path": "cluster_results/age-estimation-visualization/models/MobileAgeNet/best_model.tflite",
+        "tflite_size_mb": 12.3403,
+        "onnx_mae": 4.8389,
+        "tflite_mae": 4.8389,
+        "mae_gap_onnx_vs_tflite": 0.0,
+        "reference_mae": 4.7182,
+        "mae_gap_vs_reference": 0.1207,
+        "mae_gap_threshold": 0.75,
+        "samples_evaluated": 2372,
+        "eval_split": "val",
+        "split_seed": 42,
+        "training_summary_path": "cluster_results/age-estimation-visualization/tensorboard/utkface/MobileAgeNet/trial_0_20260402-111050/training_summary.json",
+        "training_summary_best_val_mae": 4.7182,
+        "training_summary_final_val_mae": 4.8598,
+        "preprocess": {
+            "resize": [
+                224,
+                224
+            ],
+            "normalize_mean": [
+                0.485,
+                0.456,
+                0.406
+            ],
+            "normalize_std": [
+                0.229,
+                0.224,
+                0.225
+            ]
+        }
     }
 }

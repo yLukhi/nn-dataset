@@ -531,16 +531,37 @@ class Train:
                             except Exception:
                                 labels_text.append(f"P:{p} T:{t}")
 
-                        fig_img = plt.figure(figsize=(10, 3))
-                        plt.imshow(np.transpose(grid.numpy(), (1, 2, 0)))
-                        plt.axis('off')
-                        for idx, label in enumerate(labels_text):
-                            x = 10 + (idx % 4) * 120
-                            y = 20 + (idx // 4) * 120
-                            plt.text(
-                                x, y, label, color='white', fontsize=8,
-                                bbox=dict(facecolor='black', alpha=0.5)
+                        n_show = min(len(img_list), len(labels_text))
+                        ncols = 4
+                        nrows = max(1, math.ceil(n_show / ncols))
+                        fig_img, axes = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3 * nrows))
+                        axes = np.array(axes, dtype=object).reshape(nrows, ncols)
+
+                        for idx, ax in enumerate(axes.flat):
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            if idx >= n_show:
+                                ax.axis('off')
+                                continue
+
+                            img_np = img_list[idx].detach().cpu().permute(1, 2, 0).numpy()
+                            img_min = float(np.min(img_np))
+                            img_max = float(np.max(img_np))
+                            if img_max > img_min:
+                                img_np = (img_np - img_min) / (img_max - img_min)
+                            else:
+                                img_np = np.zeros_like(img_np)
+
+                            ax.imshow(img_np)
+                            ax.set_title(
+                                labels_text[idx],
+                                fontsize=9,
+                                pad=3,
+                                color='white',
+                                backgroundcolor='black'
                             )
+
+                        fig_img.tight_layout(pad=0.6)
                         tb_writer.add_figure('Samples/Images_with_Labels', fig_img, epoch)
                         try:
                             img_path = os.path.join(self.viz_dir, f'samples_epoch_{epoch}.png')
