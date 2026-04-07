@@ -443,12 +443,6 @@ def join_nn_query_legacy(sql: JoinConf,limit_clause:Optional[str], cur):
                 f"CREATE INDEX IF NOT EXISTS idx_tmp_join ON {tmp_data}({t})"
             )
 
-        if not sql.same_columns and not sql.enhance_nn:
-            cur.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_tmp_acc_order "
-                f"ON {tmp_data}(accuracy DESC, epoch ASC, id ASC)"
-            )
-
     q_list = []
     for c in (sql.same_columns or ()):
         q_list.append(f'd2.{c} = d1.{c}')
@@ -460,12 +454,6 @@ def join_nn_query_legacy(sql: JoinConf,limit_clause:Optional[str], cur):
         q_list.append(f'd2.accuracy > d1.accuracy')
     where_clause = 'WHERE ' + ' AND '.join(q_list) if q_list else ''
 
-    order_by_clause = (
-        "ORDER BY d2.accuracy DESC, d2.epoch ASC, d2.nn ASC, d2.id ASC"
-        if (sql.enhance_nn or sql.same_columns)
-        else ""
-    )
-
     cur.execute(f'''
 WITH matches AS (
   SELECT
@@ -474,7 +462,6 @@ WITH matches AS (
           SELECT d2.id
           FROM {tmp_data} d2
           {where_clause}
-          {order_by_clause}
           LIMIT {sql.num_joint_nns - 1}
       ) AS matched_id
   FROM {tmp_data} d1
