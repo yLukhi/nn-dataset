@@ -1,30 +1,35 @@
+.*/
+
+# Automatically created folders:
+/db/
+/data/
+/out/
+/venv/
+
+# Python cache
 __pycache__/
 *.pyc
-data/
-db/
 
-# OS + environments
-.DS_Store
-.env
-.venv/
-
-# IDE / editor folders
-Code/
-PyCharm/
-VS/
-editor/
-
-# Logs and tmp
+# Logs
 *.log
-*_save
-*TAB
+*log.txt
 
-# Large artifacts
-_ann.zip
-_runs/
-_weights/
+# local build artifacts
+*.egg-info/
 
-# Misc
-local_configs/
-*.pth
-out/
+# Heavy Data
+_work/data/
+_work/temp/
+
+# Results - Ignore large models but keep JSON progress
+_work/stats/*.tflite
+_work/stats/tmp_run_*/
+_work/stats/img-classification*/
+
+# Allow JSON files
+!_work/stats/*.json
+
+# Local evidence outputs (do not commit)
+diff_summary.md
+test_output_local_*.txt
+

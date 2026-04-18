@@ -61,14 +61,14 @@ For Windows:
    python -m pip install --upgrade pip
    ```
 
-It is assumed that CUDA 12.6 is installed; otherwise, consider replacing 'cu126' with the appropriate version. Some neural network training tasks require GPUs with at least 24 GB of memory.
+It is assumed that CUDA 13.0 is installed; otherwise, consider replacing 'cu130' with the appropriate version. Some neural network training tasks require GPUs with at least 24 GB of memory.
 
 ## Environment for NN Dataset Contributors
 ### Pip package manager
 Create a virtual environment, activate it, and run the following command to install all the project dependencies:
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu130
 ```
 
 ## Contribution
@@ -110,15 +110,15 @@ rm -rf db
 ```
 Installing the stable version:
 ```bash
-pip install --no-cache-dir nn-dataset --upgrade --extra-index-url https://download.pytorch.org/whl/cu126
+pip install --no-cache-dir nn-dataset --upgrade --extra-index-url https://download.pytorch.org/whl/cu130
 ```
 Installing from GitHub to get the most recent code and statistics updates:
 ```bash
-pip install git+https://github.com/ABrain-One/nn-dataset --upgrade --force --extra-index-url https://download.pytorch.org/whl/cu126
+pip install git+https://github.com/ABrain-One/nn-dataset --upgrade --force --extra-index-url https://download.pytorch.org/whl/cu130
 ```
 Adding functionality to export data to Excel files and generate plots for <a href='https://github.com/ABrain-One/nn-stat'>analyzing neural network performance</a>:
 ```bash
-pip install nn-dataset[stat] --upgrade --extra-index-url https://download.pytorch.org/whl/cu126
+pip install nn-dataset[stat] --upgrade --extra-index-url https://download.pytorch.org/whl/cu130
 ```
 and export/generate:
 ```bash
@@ -219,6 +219,8 @@ The LEMUR API is designed for artificial agents, as well as for students and sci
 2.  **Focus on Generation:** Use `check_nn()` to automate the validation of your new, unique architectures.
 3.  **Computational Efficiency:** Prioritize allocation of high-cost computational resources (GPU/TPU) exclusively toward training novel architectures.
 
+<a href='https://huggingface.co/NN-Dataset'><strong>Checkpoints</strong></a>
+
 ### 🐳 Docker
 
 All versions of this project are compatible with <a href='https://hub.docker.com/r/abrainone/ai-linux' target='_blank'>AI Linux</a> and can be seamlessly executed within the AI Linux Docker container.
@@ -248,11 +250,12 @@ If you find the LEMUR Neural Network Dataset to be useful for your research, ple
   year={2025}
 }
 
-@article{ABrain.LEMUR2,
-  title={LEMUR 2: Unlocking Neural Network Diversity for AI},
-  author={Uzun, Tolgay Atincand and Khalid, Waleed and Din, Saif U and Mulukuledu, Sai Revanth and Singh, Akashdeep and Vysyaraju, Chandini and Duvvuri, Raghuvir and Goyal, Avi and Lukhi, Yashkumar Rajeshbhai and Hussain, Ahsan and Jesani, Krunal and Shrestha, Usha and Mittal, Yash and Kochnev, Roman and Kadam, Pritam and Ikram, Mohsin and Moradiya, Harsh Rameshbhai and Arslanian, Alice and Ignatov, Dmitry and Timofte, Radu},
-  journal={arXiv preprint},
-  year={2026}
+@InProceedings{ABrain.LEMUR2,
+	title={{LEMUR} 2: Unlocking Neural Network Diversity for {AI}},
+	 author={Uzun, Tolgay Atinc and Khalid, Waleed and Din, Saif U and Mulukuledu, Sai Revanth and Singh, Akashdeep and Vysyaraju, Chandini and Duvvuri, Raghuvir and Goyal, Avi and Lukhi, Yashkumar Rajeshbhai and Hussain, Ahsan and Jesani, Krunal and Shrestha, Usha and Mittal, Yash and Kochnev, Roman and Kadam, Pritam and Ikram, Mohsin and Moradiya, Harsh Rameshbhai and Arslanian, Alice and Ignatov, Dmitry and Timofte, Radu},
+	booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops},	
+	year={2026},
+    note={to appear}
 }
 ```
 
