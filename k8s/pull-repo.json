@@ -1,0 +1,52 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "b-a-kumar-pull-nn-dataset",
+    "namespace": "b-a-kumar"
+  },
+  "spec": {
+    "parallelism": 1,
+    "ttlSecondsAfterFinished": 86400,
+    "template": {
+      "spec": {
+        "securityContext": {
+          "runAsUser": 1051,
+          "runAsGroup": 1051
+        },
+        "containers": [
+          {
+            "name": "pull",
+            "image": "abrainone/ai-linux:cu12.6.3-latest",
+            "imagePullPolicy": "Always",
+            "command": ["/bin/bash", "-c"],
+            "args": [
+              "set -e; export GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL=/dev/null; cd /shared/ssd/home/b-a-kumar; if [ -d nn-dataset ]; then cd nn-dataset && git fetch origin && git checkout age-estimation-model && git pull origin age-estimation-model; else git clone --branch age-estimation-model https://github.com/Arun03k/nn-dataset.git; fi; echo 'Repository ready.'"
+            ],
+            "resources": {
+              "requests": {
+                "cpu": 2,
+                "memory": "4Gi"
+              },
+              "limits": {
+                "cpu": 8,
+                "memory": "16Gi"
+              }
+            },
+            "volumeMounts": [
+              { "mountPath": "/shared/ssd", "name": "shared-ssd" }
+            ]
+          }
+        ],
+        "restartPolicy": "Never",
+        "volumes": [
+          {
+            "name": "shared-ssd",
+            "hostPath": { "path": "/shared/ssd", "type": "Directory" }
+          }
+        ]
+      }
+    },
+    "backoffLimit": 1
+  }
+}
