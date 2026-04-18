@@ -2,10 +2,11 @@
 """
 Convert an ONNX age-estimation model to TFLite and verify MAE gap.
 
-This script performs three steps:
-1. Convert ONNX -> TensorFlow SavedModel via onnx2tf
-2. Convert SavedModel -> float32 TFLite
-3. Evaluate MAE of ONNX and TFLite on the same UTKFace validation samples
+This script is strict about the exported TFLite input shape:
+- ONNX -> TFLite conversion is performed with onnx2tf using tf_converter
+- the produced .tflite is checked before evaluation
+- if the exported TFLite input shape is not exactly [1, H, W, 3], the script fails
+- MAE evaluation no longer hides export problems by resizing the TFLite interpreter
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import onnx
@@ -48,21 +49,53 @@ def _patch_onnx_helper_for_onnx2tf() -> None:
     onnx.helper.float32_to_bfloat16 = _float32_to_bfloat16  # type: ignore[attr-defined]
 
 
-def _infer_onnx_layout_and_size(onnx_path: str) -> Tuple[str, int, int]:
+def _is_int_dim(value: object) -> bool:
+    return isinstance(value, (int, np.integer)) and int(value) > 0
+
+
+def _shape_dim_to_int(value: object) -> Optional[int]:
+    if _is_int_dim(value):
+        return int(value)
+    return None
+
+
+def _infer_onnx_layout_and_size(
+    onnx_path: str,
+    input_height: Optional[int] = None,
+    input_width: Optional[int] = None,
+) -> Tuple[str, int, int, str]:
+    """
+    Infer ONNX layout and spatial size.
+
+    If H/W are dynamic in the ONNX graph, input_height/input_width must be provided.
+    """
     session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-    shape = session.get_inputs()[0].shape
+    input_tensor = session.get_inputs()[0]
+    shape = list(input_tensor.shape)
+    input_name = input_tensor.name
+
     if len(shape) != 4:
         raise ValueError(f"Expected ONNX 4D input, got: {shape}")
 
-    if shape[1] == 3:
-        h = int(shape[2]) if isinstance(shape[2], int) and shape[2] > 0 else 224
-        w = int(shape[3]) if isinstance(shape[3], int) and shape[3] > 0 else 224
-        return "nchw", h, w
+    if _shape_dim_to_int(shape[1]) == 3:
+        h = _shape_dim_to_int(shape[2])
+        w = _shape_dim_to_int(shape[3])
+        if h is None or w is None:
+            if input_height is None or input_width is None:
+                h, w = 224, 224
+            else:
+                h, w = int(input_height), int(input_width)
+        return "nchw", h, w, input_name
 
-    if shape[-1] == 3:
-        h = int(shape[1]) if isinstance(shape[1], int) and shape[1] > 0 else 224
-        w = int(shape[2]) if isinstance(shape[2], int) and shape[2] > 0 else 224
-        return "nhwc", h, w
+    if _shape_dim_to_int(shape[-1]) == 3:
+        h = _shape_dim_to_int(shape[1])
+        w = _shape_dim_to_int(shape[2])
+        if h is None or w is None:
+            if input_height is None or input_width is None:
+                h, w = 224, 224
+            else:
+                h, w = int(input_height), int(input_width)
+        return "nhwc", h, w, input_name
 
     raise ValueError(f"Unable to infer input layout from ONNX shape: {shape}")
 
@@ -213,6 +246,24 @@ def _prepare_input_for_model(sample_chw: np.ndarray, input_shape: List[int]) -> 
     raise ValueError(f"Unsupported batch dim in input shape: {shape}")
 
 
+def _prepare_input_for_tflite_model(
+    sample_chw: np.ndarray,
+    expected_h: int,
+    expected_w: int,
+    dtype: np.dtype,
+) -> np.ndarray:
+    """
+    TFLite input is expected to be NHWC [1, H, W, 3] for this export path.
+    """
+    if sample_chw.shape != (3, expected_h, expected_w):
+        raise ValueError(
+            f"Sample shape mismatch. Got {sample_chw.shape}, expected (3, {expected_h}, {expected_w})."
+        )
+
+    nhwc = np.transpose(sample_chw, (1, 2, 0))[None, ...]
+    return nhwc.astype(dtype)
+
+
 def _evaluate_onnx_mae(onnx_path: str, samples: List[Tuple[np.ndarray, float]]) -> float:
     providers = ["CPUExecutionProvider"]
     session = ort.InferenceSession(onnx_path, providers=providers)
@@ -231,48 +282,134 @@ def _evaluate_onnx_mae(onnx_path: str, samples: List[Tuple[np.ndarray, float]]) 
     return total_abs / total if total else 0.0
 
 
-def _convert_onnx_to_tflite(onnx_path: str, tflite_path: str, workdir: str) -> str:
+def _read_tflite_input_shape(tflite_path: str) -> Tuple[List[int], List[int], np.dtype]:
+    interpreter = tf.lite.Interpreter(model_path=tflite_path)
+    input_details = interpreter.get_input_details()[0]
+
+    raw_shape = [int(x) for x in input_details["shape"]]
+    sig = input_details.get("shape_signature", input_details["shape"])
+    sig_shape = [int(x) for x in sig]
+    dtype = input_details["dtype"]
+
+    return raw_shape, sig_shape, dtype
+
+
+def _verify_exported_tflite_shape(
+    tflite_path: str,
+    expected_h: int,
+    expected_w: int,
+) -> Tuple[List[int], List[int], np.dtype]:
+    raw_shape, sig_shape, dtype = _read_tflite_input_shape(tflite_path)
+    expected_shape = [1, expected_h, expected_w, 3]
+
+    print(f"TFLite exported input shape     : {raw_shape}")
+    print(f"TFLite exported shape signature : {sig_shape}")
+    print(f"Expected exported input shape   : {expected_shape}")
+
+    if raw_shape != expected_shape:
+        raise RuntimeError(
+            "Exported TFLite input shape is wrong for latency use.\n"
+            f"Got raw shape     : {raw_shape}\n"
+            f"Got shape sig     : {sig_shape}\n"
+            f"Expected raw shape: {expected_shape}\n"
+            "Refusing to continue because runtime resizing would mask a bad export."
+        )
+
+    return raw_shape, sig_shape, dtype
+
+
+def _convert_onnx_to_tflite(
+    onnx_path: str,
+    tflite_path: str,
+    workdir: str,
+) -> Tuple[str, str, int, int, str]:
     _patch_onnx_helper_for_onnx2tf()
     from onnx2tf import convert as onnx2tf_convert
 
-    saved_model_dir = os.path.join(workdir, "saved_model")
-    os.makedirs(saved_model_dir, exist_ok=True)
+    layout, h, w, input_name = _infer_onnx_layout_and_size(onnx_path)
+    saved_model_dir = Path(workdir) / "saved_model"
+    saved_model_dir.mkdir(parents=True, exist_ok=True)
+
+    if layout == "nchw":
+        overwrite_shape = [f"{input_name}:1,3,{h},{w}"]
+    else:
+        overwrite_shape = [f"{input_name}:1,{h},{w},3"]
+    shape_hints = [overwrite_shape[0]]
+
+    print(f"ONNX input name               : {input_name}")
+    print(f"ONNX inferred layout          : {layout}")
+    print(f"ONNX spatial size             : {h}x{w}")
+    print(f"onnx2tf overwrite_input_shape : {overwrite_shape[0]}")
 
     onnx2tf_convert(
         input_onnx_file_path=onnx_path,
-        output_folder_path=saved_model_dir,
-        not_use_onnxsim=True,
+        output_folder_path=str(saved_model_dir),
+        overwrite_input_shape=overwrite_shape,
+        shape_hints=shape_hints,
+        keep_shape_absolutely_input_names=[input_name],
+        batch_size=1,
+        output_signaturedefs=True,
+        not_use_onnxsim=False,
         non_verbose=True,
+        verbosity="error",
     )
 
-    converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
-    tflite_model = converter.convert()
+    dst = Path(tflite_path)
+    os.makedirs(dst.parent, exist_ok=True)
+    if dst.exists():
+        dst.unlink()
 
-    os.makedirs(os.path.dirname(tflite_path), exist_ok=True)
-    with open(tflite_path, "wb") as f:
-        f.write(tflite_model)
+    loaded_model = tf.saved_model.load(str(saved_model_dir))
+    serving_fn = loaded_model.signatures["serving_default"]
+    input_keys = list(serving_fn.structured_input_signature[1].keys())
+    output_keys = list(serving_fn.structured_outputs.keys())
+    if len(output_keys) != 1:
+        raise RuntimeError(f"Expected one output tensor from SavedModel, got: {output_keys}")
+    output_key = output_keys[0]
 
-    return saved_model_dir
-
-
-def _evaluate_tflite_mae(tflite_path: str, samples: List[Tuple[np.ndarray, float]]) -> float:
-    interpreter = tf.lite.Interpreter(model_path=tflite_path)
-
-    # If the model has dynamic spatial dims, resize once using the first sample.
-    first_sample = samples[0][0]
-    input_details = interpreter.get_input_details()[0]
-    in_idx = input_details["index"]
-    shape_sig = list(input_details.get("shape_signature", input_details["shape"]))
-    if -1 in shape_sig:
-        h, w = first_sample.shape[1], first_sample.shape[2]
-        if len(shape_sig) == 4 and shape_sig[-1] == 3:
-            target = [1, h, w, 3]
-        elif len(shape_sig) == 4 and shape_sig[1] == 3:
-            target = [1, 3, h, w]
+    @tf.function(input_signature=[tf.TensorSpec([1, h, w, 3], tf.float32, name="input")])
+    def wrapped_serve(x: tf.Tensor) -> tf.Tensor:
+        x_nchw = tf.transpose(x, [0, 3, 1, 2])
+        if input_keys:
+            result = serving_fn(**{input_keys[0]: x_nchw})
         else:
-            target = [1, h, w, 3]
-        interpreter.resize_tensor_input(in_idx, target, strict=False)
+            result = serving_fn(x_nchw)
+        return result[output_key]
 
+    concrete_fn = wrapped_serve.get_concrete_function()
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_fn])
+    converter.allow_custom_ops = False
+    tflite_model = converter.convert()
+    dst.write_bytes(tflite_model)
+
+    return str(saved_model_dir), str(dst), h, w, layout
+
+
+def _evaluate_tflite_mae(
+    tflite_path: str,
+    samples: List[Tuple[np.ndarray, float]],
+    expected_h: int,
+    expected_w: int,
+) -> float:
+    """
+    Evaluate TFLite MAE without resizing the interpreter.
+
+    This intentionally fails if the model was exported with the wrong input shape,
+    because the goal is to validate the file that will later be used for latency tests.
+    """
+    raw_shape, sig_shape, input_dtype = _verify_exported_tflite_shape(
+        tflite_path,
+        expected_h,
+        expected_w,
+    )
+
+    expected_shape = [1, expected_h, expected_w, 3]
+    if raw_shape != expected_shape:
+        raise RuntimeError(
+            f"TFLite input shape mismatch before evaluation: raw={raw_shape}, sig={sig_shape}"
+        )
+
+    interpreter = tf.lite.Interpreter(model_path=tflite_path)
     interpreter.allocate_tensors()
 
     inp = interpreter.get_input_details()[0]
@@ -287,8 +424,12 @@ def _evaluate_tflite_mae(tflite_path: str, samples: List[Tuple[np.ndarray, float
     total_abs = 0.0
     total = 0
     for sample, gt in samples:
-        x_in, valid = _prepare_input_for_model(sample, list(inp["shape"]))
-        x_feed = x_in.astype(input_dtype)
+        x_feed = _prepare_input_for_tflite_model(
+            sample_chw=sample,
+            expected_h=expected_h,
+            expected_w=expected_w,
+            dtype=input_dtype,
+        )
 
         interpreter.set_tensor(in_idx, x_feed)
         interpreter.invoke()
@@ -296,7 +437,7 @@ def _evaluate_tflite_mae(tflite_path: str, samples: List[Tuple[np.ndarray, float
         pred_age = float(np.asarray(pred).reshape(-1)[0])
 
         total_abs += abs(pred_age - gt)
-        total += valid
+        total += 1
 
     return total_abs / total if total else 0.0
 
@@ -363,9 +504,9 @@ def main() -> int:
     if summary_best_mae is not None:
         args.reference_mae = float(summary_best_mae)
 
-    layout, image_h, image_w = _infer_onnx_layout_and_size(str(onnx_path))
+    layout, image_h, image_w, input_name = _infer_onnx_layout_and_size(str(onnx_path))
     print(
-        f"Loading samples (split={args.eval_split}, n={'all' if args.max_samples == 0 else args.max_samples}, layout={layout}, size={image_h}x{image_w})..."
+        f"Loading samples (split={args.eval_split}, n={'all' if args.max_samples == 0 else args.max_samples}, layout={layout}, size={image_h}x{image_w}, input={input_name})..."
     )
     samples = _prepare_samples(args.max_samples, image_h, image_w, args.eval_split, args.split_seed)
     if not samples:
@@ -376,10 +517,26 @@ def main() -> int:
 
     print("Converting ONNX to TFLite...")
     with tempfile.TemporaryDirectory() as tmpdir:
-        _convert_onnx_to_tflite(str(onnx_path), args.tflite_path, tmpdir)
+        _, exported_tflite_path, export_h, export_w, export_layout = _convert_onnx_to_tflite(
+            onnx_path=str(onnx_path),
+            tflite_path=args.tflite_path,
+            workdir=tmpdir,
+        )
+
+    print("Verifying exported TFLite input shape...")
+    exported_raw_shape, exported_sig_shape, exported_dtype = _verify_exported_tflite_shape(
+        exported_tflite_path,
+        export_h,
+        export_w,
+    )
 
     print("Evaluating TFLite MAE...")
-    tflite_mae = _evaluate_tflite_mae(args.tflite_path, samples)
+    tflite_mae = _evaluate_tflite_mae(
+        exported_tflite_path,
+        samples,
+        expected_h=export_h,
+        expected_w=export_w,
+    )
 
     mae_gap = abs(tflite_mae - onnx_mae)
     ref_gap = abs(tflite_mae - args.reference_mae)
@@ -389,6 +546,7 @@ def main() -> int:
     report = {
         model_name: {
             "status": "success" if pass_gap else "warning_large_gap",
+            "onnx_path": str(onnx_path.as_posix()),
             "tflite_path": str(Path(args.tflite_path).as_posix()),
             "tflite_size_mb": round(Path(args.tflite_path).stat().st_size / (1024 * 1024), 4),
             "onnx_mae": round(onnx_mae, 4),
@@ -403,6 +561,12 @@ def main() -> int:
             "training_summary_path": args.training_summary_path,
             "training_summary_best_val_mae": round(float(summary_best_mae), 4) if summary_best_mae is not None else None,
             "training_summary_final_val_mae": round(float(summary_final_mae), 4) if summary_final_mae is not None else None,
+            "onnx_layout": export_layout,
+            "onnx_input_name": input_name,
+            "onnx_spatial_size": [export_h, export_w],
+            "tflite_exported_input_shape": exported_raw_shape,
+            "tflite_exported_shape_signature": exported_sig_shape,
+            "tflite_input_dtype": str(np.dtype(exported_dtype).name),
             "preprocess": {
                 "resize": [image_h, image_w],
                 "normalize_mean": [0.485, 0.456, 0.406],
@@ -421,6 +585,8 @@ def main() -> int:
     print(f"TFLite MAE : {tflite_mae:.4f}")
     print(f"MAE Gap    : {mae_gap:.4f} (threshold={args.mae_gap_threshold:.4f})")
     print(f"Reference  : {args.reference_mae:.4f} (gap={ref_gap:.4f})")
+    print(f"TFLite exported raw shape: {exported_raw_shape}")
+    print(f"TFLite shape signature   : {exported_sig_shape}")
     if summary_best_mae is not None or summary_final_mae is not None:
         print(
             f"Training Summary MAE (best/final val): "
