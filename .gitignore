@@ -1,10 +1,21 @@
-# Environments
-venv/
-.env
+.*/
+
+# Automatically created folders:
+/db/
+/data/
+/out/
+/venv/
 
 # Python cache
 __pycache__/
 *.pyc
+
+# Logs
+*.log
+*log.txt
+
+# local build artifacts
+*.egg-info/
 
 # Heavy Data
 _work/data/
@@ -18,6 +29,7 @@ _work/stats/img-classification*/
 # Allow JSON files
 !_work/stats/*.json
 
-# Logs
-*.log
-log.txt
+# Local evidence outputs (do not commit)
+diff_summary.md
+test_output_local_*.txt
+

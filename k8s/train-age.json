@@ -1,0 +1,64 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "b-a-kumar-train-age",
+    "namespace": "b-a-kumar"
+  },
+  "spec": {
+    "parallelism": 1,
+    "ttlSecondsAfterFinished": 86400,
+    "template": {
+      "spec": {
+        "securityContext": {
+          "runAsUser": 1051,
+          "runAsGroup": 1051
+        },
+        "containers": [
+          {
+            "name": "train",
+            "image": "abrainone/ai-linux:cu12.6.3-latest",
+            "imagePullPolicy": "Always",
+            "command": ["/bin/bash", "-c"],
+            "args": [
+              "set -e; export HOME=/shared/ssd/home/b-a-kumar; export HF_HOME=/shared/ssd/home/b-a-kumar/.cache/huggingface; export HF_TOKEN=''; export PYTHONUNBUFFERED=1; export GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL=/dev/null; cd /shared/ssd/home/b-a-kumar/nn-dataset; git pull origin age-estimation-model || echo '[WARN] git pull failed, using local code'; export PYTHONPATH=/shared/ssd/home/b-a-kumar/nn-dataset:$PYTHONPATH; echo '--- Installing dependencies ---'; python3 -m pip install -e . -q 2>&1 | tail -5; echo '--- GPU Check ---'; python3 -c \"import torch; print(f'CUDA: {torch.cuda.is_available()}, GPUs: {torch.cuda.device_count()}'); [print(f'  GPU {i}: {torch.cuda.get_device_name(i)}') for i in range(torch.cuda.device_count())]\"; echo '--- Phase 1: HP Search (30 trials x 50 epochs) ---'; python3 train_age_estimation.py 2>&1; echo '--- Phase 1 Finished ---'"
+            ],
+            "resources": {
+              "requests": {
+                "nvidia.com/gpu": 1,
+                "cpu": 8,
+                "memory": "30Gi"
+              },
+              "limits": {
+                "nvidia.com/gpu": 1,
+                "cpu": 64,
+                "memory": "120Gi"
+              }
+            },
+            "volumeMounts": [
+              { "mountPath": "/dev/shm", "name": "shm" },
+              { "mountPath": "/shared/ssd", "name": "shared-ssd" },
+              { "mountPath": "/shared/local/data/b-a-kumar", "name": "local-data" }
+            ]
+          }
+        ],
+        "restartPolicy": "Never",
+        "volumes": [
+          {
+            "name": "shm",
+            "emptyDir": { "medium": "Memory", "sizeLimit": "16Gi" }
+          },
+          {
+            "name": "shared-ssd",
+            "hostPath": { "path": "/shared/ssd", "type": "Directory" }
+          },
+          {
+            "name": "local-data",
+            "hostPath": { "path": "/shared/local/data/b-a-kumar", "type": "DirectoryOrCreate" }
+          }
+        ]
+      }
+    },
+    "backoffLimit": 1
+  }
+}

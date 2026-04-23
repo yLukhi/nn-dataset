@@ -503,7 +503,6 @@ def fill_hyper_prm(cur: Cursor, num_joint_nns=1, include_nn_stats=False) -> list
         for i in range(2, num_joint_nns + 1):
             i = str(i)
             rec['prm_' + i] = prm_by_uid.get(rec['prm_id_' + i], {})
-        rec.pop('transform', None)
 
         # Parse nn_stats_meta JSON if present
         if include_nn_stats and 'nn_stats_meta' in rec and rec['nn_stats_meta']:
