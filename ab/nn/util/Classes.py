@@ -17,7 +17,7 @@ class DataRoll(tqdm):
         return self
 
     def __next__(self):
-        if self.n > 100: # Increased from 5 to 100 for more stable estimation
+        if self.n > 5:
             duration = max(1e-1, time.time() - self.init_time)
             estimated_time = self.total * duration  / self.n / 60
             if estimated_time > self.epoch_limit_minutes:
